@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin
+spec:
+  replicas: 1
+  template:
+    spec:
+      securityContext:
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "0"
+      initContainers:
+        - image: docker.io/library/phpmyadmin:5
+          name: init-phpmyadmin
+          volumeMounts:
+            - name: phpmyadmin-config
+              mountPath: /config
+          command:
+            - sh
+            - -c
+            - |
+              if ! [ -f /config/config.user.inc.php ]; then
+                echo "copying initial configuration"
+                tar -C /etc/phpmyadmin -cf- . | tar -C /config --strip-components=1 -xf-
+              fi
+      containers:
+        - image: docker.io/library/phpmyadmin:5
+          name: phpmyadmin
+          env:
+            - name: PMA_HOST
+              value: mariadb
+            - name: PMA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-credentials
+                  key: MARIADB_USER
+            - name: PMA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-credentials
+                  key: MARIADB_PASSWORD
+          ports:
+            - containerPort: 80
+              name: phpmyadmin
+          volumeMounts:
+            - name: phpmyadmin-config
+              mountPath: /etc/phpmyadmin
+      volumes:
+        - name: phpmyadmin-config
+          emptyDir: {}
